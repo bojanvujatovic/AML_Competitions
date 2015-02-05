@@ -89,6 +89,8 @@ def encode(orig_path, num_path, train):
 
 		if t % 500000 == 0:
 			print t
+	print 'FEATURES:'
+	pprint()
 	return X, y	
 
 train, click = encode(TRAIN_PATH, train_num_path, train=True)
@@ -101,5 +103,8 @@ dump_svmlight_file(train, click, TRAIN_PATH + '_svmlight')
 test, ids = encode(TEST_PATH, test_num_path, train=False)
 test = enc.transform(test)
 dump_svmlight_file(test, ids, TEST_PATH + '_svmlight')
+
+print 'FEATURE INDICES:'
+pprint(enc.features_indices_)
 
 print '\n\n\n'
