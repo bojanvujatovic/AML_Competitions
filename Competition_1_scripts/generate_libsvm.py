@@ -10,9 +10,6 @@ FEATS2REMOVE = set(['id', 'click', 'hour', 'device_ip', 'device_id', 'device_mod
 NEWFEATURES = ['day', 'hour_country', 'C15_16']
 MIN_FREQ = 5
 
-train_num_path = TRAIN_PATH + '_num'
-test_num_path = TEST_PATH + '_num'
-
 convertion = {}
 freqs = {}
 null_values = {
@@ -42,61 +39,56 @@ def initialise_reader(orig_path):
 	return reader, features
 
 def encode(orig_path, num_path, train):
-	with open(num_path, 'w') as num:
-		# compute frequencies
-		if train:
-			print '\n\n#### COUNTING FREQUENCIES'
-			reader, features = initialise_reader(orig_path)
-			for feat in features:
-				freqs[feat] = {}
-			for t, row in enumerate(reader):
-				row = transformrow(row)
-				for feat in features:
-					if row[feat] not in freqs[feat]:
-						freqs[feat][row[feat]] = 0
-					freqs[feat][row[feat]] += 1
-				if t % 500000 == 0:
-					print t
-
-		print '\n\n#### CONVERTING', orig_path
+	# compute frequencies
+	if train:
+		print '\n\n#### COUNTING FREQUENCIES'
 		reader, features = initialise_reader(orig_path)
 		for feat in features:
-			convertion[feat] = {'UNK': 0}
-		y = []
-		X = []
-		# num.write('%s\n' % ','.join(features))
+			freqs[feat] = {}
 		for t, row in enumerate(reader):
-			# label
-			if 'click' in row:
-				y.append(int(row['click']))
-				# num.write('%s,' % row['click'])
-			else:
-				y.append(-1)
-				# num.write('%s,' % str(-1))
-
 			row = transformrow(row)
-
-			sample = []
-			for key in features:
-				if train:
-					if freqs[key][row[key]] > MIN_FREQ \
-						and (key not in null_values or row[key] != null_values[key]):
-						if row[key] not in convertion[key]:
-							convertion[key][row[key]] = len(convertion[key])
-						sample.append(convertion[key][row[key]])
-					else:
-						sample.append(convertion[key]['UNK'])
-				else:
-					if row[key] in convertion[key] and freqs[key][row[key]] > MIN_FREQ \
-						and (key not in null_values or row[key] != null_values[key]):
-						sample.append(convertion[key][row[key]])
-					else:
-						sample.append(convertion[key]['UNK'])
-			X.append(sample)
-			# num.write('%s\n' % ','.join(sample))
-
+			for feat in features:
+				if row[feat] not in freqs[feat]:
+					freqs[feat][row[feat]] = 0
+				freqs[feat][row[feat]] += 1
 			if t % 500000 == 0:
 				print t
+
+	print '\n\n#### CONVERTING', orig_path
+	reader, features = initialise_reader(orig_path)
+	for feat in features:
+		convertion[feat] = {'UNK': 0}
+	y = []
+	X = []
+	for t, row in enumerate(reader):
+		# label
+		if 'click' in row:
+			y.append(int(row['click']))
+		else:
+			y.append(row['id'])
+
+		row = transformrow(row)
+
+		sample = []
+		for key in features:
+			if train:
+				if freqs[key][row[key]] > MIN_FREQ \
+					and (key not in null_values or row[key] != null_values[key]):
+					if row[key] not in convertion[key]:
+						convertion[key][row[key]] = len(convertion[key])
+					sample.append(convertion[key][row[key]])
+				else:
+					sample.append(convertion[key]['UNK'])
+			else:
+				if row[key] in convertion[key] and freqs[key][row[key]] > MIN_FREQ \
+					and (key not in null_values or row[key] != null_values[key]):
+					sample.append(convertion[key][row[key]])
+				else:
+					sample.append(convertion[key]['UNK'])
+		X.append(sample)
+
+		if t % 500000 == 0:
+			print t
 	return X, y	
 
 train, click = encode(TRAIN_PATH, train_num_path, train=True)
@@ -106,8 +98,8 @@ train = enc.fit_transform(train)
 train = train[:-1]
 dump_svmlight_file(train, click, TRAIN_PATH + '_svmlight')
 
-test, foo = encode(TEST_PATH, test_num_path, train=False)
+test, ids = encode(TEST_PATH, test_num_path, train=False)
 test = enc.transform(test)
-dump_svmlight_file(test, foo, TEST_PATH + '_svmlight')
+dump_svmlight_file(test, ids, TEST_PATH + '_svmlight')
 
 print '\n\n\n'
