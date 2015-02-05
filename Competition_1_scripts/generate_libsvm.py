@@ -9,6 +9,7 @@ TEST_PATH = './test'
 FEATS2REMOVE = set(['id', 'click', 'hour', 'device_ip', 'device_id', 'device_model', 'C15', 'C16'])
 NEWFEATURES = ['day', 'hour_country', 'C15_16']
 MIN_FREQ = 5
+APP = True
 
 convertion = {}
 freqs = {}
@@ -20,6 +21,18 @@ null_values = {
 	'app_domain': '7801e8d9',
 	'app_category': '07d7df22'
 }
+if APP:
+	FEATS2REMOVE.add('site_id')
+	FEATS2REMOVE.add('site_domain')
+	FEATS2REMOVE.add('site_category')
+else:
+	FEATS2REMOVE.add('app_id')
+	FEATS2REMOVE.add('app_domain')
+	FEATS2REMOVE.add('app_category')
+
+suffix = '_svmlight_' + ('app' if APP else 'site')
+
+features = []
 
 def transformrow(row):
 	# feature engineering
@@ -46,6 +59,9 @@ def encode(orig_path, num_path, train):
 		for feat in features:
 			freqs[feat] = {}
 		for t, row in enumerate(reader):
+			if (APP and row['app_id'] == null_values['app_id'])\
+				or (!APP and row['device_id'] == null_values['device_id']):
+				continue
 			row = transformrow(row)
 			for feat in features:
 				if row[feat] not in freqs[feat]:
@@ -61,6 +77,9 @@ def encode(orig_path, num_path, train):
 	y = []
 	X = []
 	for t, row in enumerate(reader):
+		if (APP and row['app_id'] == null_values['app_id'])\
+			or (!APP and row['device_id'] == null_values['device_id']):
+			continue
 		# label
 		if 'click' in row:
 			y.append(int(row['click']))
@@ -89,8 +108,6 @@ def encode(orig_path, num_path, train):
 
 		if t % 500000 == 0:
 			print t
-	print 'FEATURES:'
-	pprint()
 	return X, y	
 
 train, click = encode(TRAIN_PATH, train_num_path, train=True)
@@ -98,15 +115,19 @@ enc = OneHotEncoder()
 train.append([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 train = enc.fit_transform(train)
 train = train[:-1]
-dump_svmlight_file(train, click, TRAIN_PATH + '_svmlight')
+dump_svmlight_file(train, click, TRAIN_PATH + suffix)
 
-print 'FEATURE INDICES:'
-pprint(enc.features_indices_)
+with open('feature_indices_' + ('app' if APP else 'site'), 'w') as feat_file:
+	feat_file.write('feature,idx\n')
+	for i in xrange(len(features)):
+		feat_file.write('%s,%s\n' % (features[i], enc.features_indices_))
 
 test, ids = encode(TEST_PATH, test_num_path, train=False)
 test = enc.transform(test)
-dump_svmlight_file(test, ids, TEST_PATH + '_svmlight')
+dump_svmlight_file(test, ids, TEST_PATH + suffix)
 
+print 'FEATURES:'
+pprint(features)
 print 'FEATURE INDICES:'
 pprint(enc.features_indices_)
 
