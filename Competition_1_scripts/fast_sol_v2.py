@@ -26,13 +26,13 @@ import multiprocessing
 # TL; DR, the main training process starts on line: 250,
 # you may want to start reading the code from there
 
-def main_loop(l1, l2, train, test, isTesting, holdoutSize):
+def main_loop(l1, l2, train, test, isTesting, holdoutSize, epoch, random_feats=False):
     ##############################################################################
     # parameters #################################################################
     ##############################################################################
 
     # A, paths
-    chdir('/Users/miljan/Documents/ML Master/Applied Machine Learning/Avazu Click-Through Prediction Rate/Data/new')
+#    chdir('/Users/miljan/Documents/ML Master/Applied Machine Learning/Avazu Click-Through Prediction Rate/Data/new')
     submission = 'submission_new' + datetime.today().isoformat() + '.csv'  # path of to be outputted submission file
 
     # B, model
@@ -41,14 +41,32 @@ def main_loop(l1, l2, train, test, isTesting, holdoutSize):
     L1 = l1     # L1 regularization, larger value means more regularized
     L2 = l2     # L2 regularization, larger value means more regularized
 
-    # C, feature/hash trick
+    # randomize set of features
     with open(train, 'r') as t:
         rd = DictReader(t)
-        D = int(rd.fieldnames[-1].split(':')[1])
+        header = rd.fieldnames
+    if random_feats:
+        feat_values = map(lambda x: int(x.split(":")[1]), header[1:])
+        n_feat = len(feat_idx)
+        set_of_feats = random.randint(0, 2 ** n_feat - 1)
+        D = 0
+        for i in xrange(n_feat - 1,0, -1):
+            feat_values[i] = feat_values[i] - feat_values[i - 1]
+            if set_of_feats & (1 << i):
+                D += feat_values[i]
+        offset = [0] * (n_feat + 1)
+        for i in xrange(n_feat):
+            if not set_of_feats & (1 << i):
+                offset[i + 1] += feat_values[i]
+            offset[i + 1] += offset[i]
+    else:
+        D = int(header[-1].split(':')[1])
+
+
     interaction = False     # whether to enable poly2 feature interactions
 
     # D, training/validation
-    epoch = 1      # learn training data for N passes
+    # epoch = 8      # learn training data for N passes
     holdafter = None   # data after date N (exclusive) are used as validation
     holdout = holdoutSize  # use every N training instance for holdout validation
 
@@ -230,12 +248,15 @@ def main_loop(l1, l2, train, test, isTesting, holdoutSize):
                 ID = row[0]
 
             # build 
-            x = []
-            for key in row[1:]:
-                # one-hot encode everything with hash trick
-                index = abs(hash(key)) % D
-                x.append(index)
-            # x = map(int, row[1:])
+            # x = []
+            # for key in row[1:]:
+            #     # one-hot encode everything with hash trick
+            #     index = abs(hash(key)) % D
+            #     x.append(index)
+            if random_feats:
+                x = [x[i] - offset[i] for i in xrange(n_feat) if set_of_feats & (1  << i)]
+            else:
+                x = map(int, row[1:])
             yield t, ID, x, y
 
 
@@ -278,7 +299,7 @@ def main_loop(l1, l2, train, test, isTesting, holdoutSize):
                 # step 2-2, update learner with label (click) information
                 learner.update(x, p, y)
 
-        if isTesting:
+        if not isTesting:
             print('Epoch %d finished, validation logloss: %f, elapsed time: %s' % (
                 e, loss/count, str(datetime.now() - start)))
 
@@ -294,8 +315,8 @@ def main_loop(l1, l2, train, test, isTesting, holdoutSize):
             for t, ID, x, y in data(test, D, False):
                 p = learner.predict(x)
                 outfile.write('%s,%s\n' % (ID, str(p)))
-        return loss/count
-        print('Done testing')
+       	print('Done testing')
+	return loss/count
 
 def greedy_feature_selection():
     l_features = []
@@ -390,15 +411,15 @@ def select_l1_l2():
 if __name__ == '__main__':
     print('Training and validating!\n')
     # validate on 10% holdout
-    p1 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_app', './test_svmlight_app', True, 10, ))
-    p2 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_site', './test_svmlight_site', True, 10, ))
+    p1 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_app', './test_svmlight_app', False, 10, 7, ))
+    p2 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_site', './test_svmlight_site', False, 10, 3, ))
     p1.start()
     p2.start()
 
     # retrain on full, and create submission file
-    # p3 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_app', './test_svmlight_app', True, 100000, ))
-    # p4 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_site', './test_svmlight_site', True, 100000, ))
-    # p3.start()
-    # p4.start()
+    p3 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_app', './test_svmlight_app', True, 100000, 7, ))
+    p4 = multiprocessing.Process(target=main_loop, args=(0.01, 0.01, './train_svmlight_site', './test_svmlight_site', True, 100000, 3, ))
+    p3.start()
+    p4.start()
 
 
